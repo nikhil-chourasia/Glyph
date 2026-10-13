@@ -57,36 +57,39 @@ The repo was a Next.js 16 (App Router) + Tailwind v4 scaffold with:
 1. **Make the core loop real.** Code goes in (editable, in the preview
    itself), gets auto-detected + highlighted, and can be exported as a
    real PNG file.
-   - Status: DONE (verified: `next lint` clean, `next build` passes,
+   - Status: DONE (verified: `npm run lint` clean, `npm run build` passes,
      dev-server HTML shows `hljs-*` tokens, "Detected: Python" badge,
      editable textarea, live width/height sliders, Export PNG button
      wired to dynamically-imported `html2canvas` at 2x scale).
 2. **Wire every control to real state.** Nothing in the sidebar should be
    a no-op. Presets should actually apply a bundle of settings.
    - Status: DONE (all controls in Sidebar wired to live state; presets
-     "Default", "Dark", "Code", "Presentation", "Cyberpunk", and "Nordic"
+     "Minimal Dark", "Dark", "Clean Editor", "Presentation", "Pure Light",
+     "Nordic Frost", and "Midnight Ink"
      apply coordinated styling bundles).
 3. **Fill in missing, expected options**:
    - Manual language override (in case auto-detect guesses wrong) — DONE.
    - Detected-language badge/indicator — DONE.
-   - Window title / filename text in the title bar (with live inline edit) — DONE.
+   - Window title / filename text in the title bar (with live inline edit),
+     language-aware untitled placeholders, and safe export filenames — DONE.
    - Traffic-light visibility toggle — DONE.
    - Line numbers toggle — DONE.
-   - Font size control (slider from 11px to 26px) — DONE.
+   - Font size control (slider from 10px to 32px) — DONE.
    - Corner radius + shadow intensity controls — DONE.
-   - Watermark ("Made with Glyph") toggle — DONE.
-   - Copy-code-to-clipboard — DONE.
+   - Compact Glyph watermark toggle — DONE.
    - Copy PNG image directly to clipboard (`navigator.clipboard.write`) — DONE.
    - Export/import full configuration as a `.glyph.json` file — DONE.
-   - Aspect ratio quick-presets (Auto, 16:9, 4:3, 1:1, Twitter) — DONE.
+   - Aspect ratio quick-presets (Auto, 16:9, 4:3, 1:1, X, LinkedIn) — DONE.
    - Syntax themes (Glyph Dark, Glyph Light, Dracula, Night Owl, Nord) — DONE.
+   - Configurable highlighted-line color and tab-size-aware tab rendering — DONE.
+   - Optional text-only X / LinkedIn identity footer — DONE.
 4. **Design overhaul.**
-   - Status: DONE. Integrated header with prototype buttons (Import Glyph,
-     Export Glyph, Export PNG, Copy Code, Copy Image), responsive preview
-     stage with drag-to-resize handles, glassmorphism sidebar, toast
+    - Status: DONE. Integrated header with prototype buttons (Import Glyph,
+      Export Glyph, Export PNG, Copy Image), responsive preview
+       stage with drag-to-resize handles, glassmorphism sidebar, toast
      notifications, CSS duplication removed, and cohesive purple/teal palette.
 5. **No regressions.**
-   - Status: DONE (`next lint` and `next build` pass cleanly with 0 errors).
+   - Status: DONE (`npm run lint` and `npm run build` pass cleanly with 0 errors).
 
 ## 5. Technical approach / decisions
 
@@ -119,6 +122,12 @@ The repo was a Next.js 16 (App Router) + Tailwind v4 scaffold with:
 - **State lives in `page.js`** (single source of truth, lifted state),
   passed down to `Sidebar` and `PreviewStage`. No external state library
   needed at this size.
+- **Titles and identity:** untouched `untitled` placeholders derive an extension
+  from the detected or manually selected language; explicit filenames remain
+  unchanged. Export basenames are sanitized with a `glyph` fallback. A nested
+  `socialIdentity` config stores an optional X or LinkedIn handle as text only.
+- **Typography:** the UI uses variable Figtree from `next/font/google`, while
+  code and numeric values continue to use Geist Mono.
 
 ## 6. Out of scope for this pass (explicitly deferred)
 
@@ -127,15 +136,13 @@ The repo was a Next.js 16 (App Router) + Tailwind v4 scaffold with:
   JSON export/import.
 - Full custom font upload.
 - Mobile-first redesign beyond the existing responsive breakpoint.
-- Switching to `highlight.js/lib/core` with a curated language subset for
-  bundle-size optimization.
 
 ## 7. Follow-ups / future ideas
 
-- Drag-to-resize handles on the preview window (in addition to sliders).
 - SVG export in addition to PNG.
 - Keyboard shortcuts (Cmd/Ctrl+Enter to export, Cmd/Ctrl+K for presets).
-- Persist last session to `localStorage`.
+- Browser-level regression coverage for title derivation, custom identity,
+  tab-size parity, and PNG capture at each export scale/theme.
 
 ## 8. Post-Objective-1 UX fixes (2026-10-13)
 
@@ -151,3 +158,24 @@ The repo was a Next.js 16 (App Router) + Tailwind v4 scaffold with:
 - Editor scroll sync: textarea `onScroll` mirrors `scrollTop/scrollLeft`
   into the highlighted `<pre>` (scrollbar hidden) and the gutter, so
   caret and tokens never drift on long/wide code.
+
+## 9. Planned phase completion (2026-10-14)
+
+- Automatic language-aware title extensions and sanitized PNG/JSON export names
+  are implemented without replacing explicit filenames.
+- The Code inspector now controls a capture-safe highlighted-line color and
+  applies the selected tab size to both the textarea and highlighted layer.
+- Aspect ratios use a compact responsive select; numeric controls display units
+  beside values; the background picker includes additional explicit-color
+  gradients.
+- The default sample is a stable Python snippet with real tabs, and UI
+  typography uses variable Figtree with Geist Mono retained for code.
+- Layout includes optional local X / LinkedIn handle text rendered below code;
+  imports, local storage, custom presets, and `.glyph.json` exports sanitize it.
+- The canvas now keeps its dimensions at or above the rendered window plus outer
+  padding, slider value fields size to their numeric ranges, and the empty state
+  no longer includes a sample action.
+- The hydration mismatch from reading custom presets during the initial render
+  is fixed by loading browser storage after the deterministic first render.
+- Window shadows render through a dedicated shadow wrapper that remains in the
+  PNG capture path, including transparent-background exports.

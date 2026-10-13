@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useLayoutEffect, useMemo, useRef } from "react";
+import { DEFAULT_HIGHLIGHT_COLOR, getHighlightBackground, sanitizeHighlightColor } from "../lib/snapshot";
 
 // highlight.js spans can cross newlines. Close/reopen them so each logical
 // line is independently measurable without losing multiline token colors.
@@ -33,14 +34,14 @@ export default function CodeEditor({
   code = "", highlightedHtml = "", onChange, fontSize = 14,
   showLineNumbers = false, fontFamily = "geist", lineHeight = 1.6,
   ligatures = true, highlightedLines = "", wrap = false, tabSize = 2, inputRef,
-  innerPadding = 20,
+  innerPadding = 20, highlightColor = DEFAULT_HIGHLIGHT_COLOR,
 }) {
   const textareaRef = useRef(null);
   const preRef = useRef(null);
   const gutterRef = useRef(null);
   const escapeTabRef = useRef(false);
   const helpId = useId();
-  const tabWidth = Math.max(2, Math.min(8, Number(tabSize) || 4));
+  const tabWidth = Math.round(Math.max(2, Math.min(8, Number(tabSize) || 4)));
   const lines = useMemo(() => splitHighlight(highlightedHtml), [highlightedHtml]);
 
   // Measure actual wrapped rows rather than guessing with character counts.
@@ -50,7 +51,9 @@ export default function CodeEditor({
     function sync() {
       if (gutter) {
         Array.from(pre.children).forEach((row, index) => {
-          if (gutter.children[index]) gutter.children[index].style.height = `${row.getBoundingClientRect().height}px`;
+          // offsetHeight is in layout pixels, so it remains correct while the
+          // entire workspace is zoomed and keeps wrapped lines aligned.
+          if (gutter.children[index]) gutter.children[index].style.height = `${row.offsetHeight}px`;
         });
       }
       if (textareaRef.current) {
@@ -65,7 +68,7 @@ export default function CodeEditor({
     observer.observe(pre);
     Array.from(pre.children).forEach((row) => observer.observe(row));
     return () => observer.disconnect();
-  }, [lines, showLineNumbers, fontSize, lineHeight, wrap, fontFamily, innerPadding]);
+  }, [lines, showLineNumbers, fontSize, lineHeight, wrap, fontFamily, innerPadding, tabWidth, ligatures]);
 
   function handleScroll(event) {
     const { scrollTop, scrollLeft } = event.currentTarget;
@@ -90,9 +93,8 @@ export default function CodeEditor({
     event.preventDefault();
     const element = event.currentTarget;
     const { selectionStart, selectionEnd } = element;
-    const spaces = " ".repeat(tabWidth);
-    onChange(`${code.slice(0, selectionStart)}${spaces}${code.slice(selectionEnd)}`);
-    requestAnimationFrame(() => element.setSelectionRange(selectionStart + spaces.length, selectionStart + spaces.length));
+    onChange(`${code.slice(0, selectionStart)}\t${code.slice(selectionEnd)}`);
+    requestAnimationFrame(() => element.setSelectionRange(selectionStart + 1, selectionStart + 1));
   }
 
   return (
@@ -102,6 +104,8 @@ export default function CodeEditor({
       fontVariantLigatures: ligatures ? "normal" : "none",
        tabSize: tabWidth, padding: `${innerPadding}px`,
        "--editor-tab-size": tabWidth,
+      "--line-highlight-color": sanitizeHighlightColor(highlightColor),
+      "--line-highlight-bg": getHighlightBackground(highlightColor),
       "--editor-white-space": wrap ? "pre-wrap" : "pre",
       "--editor-wrap": wrap ? "anywhere" : "normal",
     }}>

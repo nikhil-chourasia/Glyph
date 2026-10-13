@@ -11,7 +11,6 @@ export default function Header({
   isExporting,
   onCopyImage,
   isCopyingImage,
-  onCopyCode,
   onExportConfig,
   onTriggerImport,
   theme,
@@ -61,7 +60,6 @@ export default function Header({
         <div className="brand-logo-mark" aria-hidden="true"><span>g</span></div>
         <div>
           <div className="brand-title">glyph</div>
-          <div className="brand-subtitle">code snapshots, refined</div>
         </div>
       </div>
 
@@ -77,15 +75,14 @@ export default function Header({
         </button>
         <div className="export-menu-wrap" ref={menuRef}>
            <button ref={triggerRef} className="btn primary export-trigger" onClick={() => setExportOpen((open) => !open)} aria-expanded={exportOpen} aria-haspopup="menu" aria-controls="glyph-export-menu">
-            <Icon><path d="M12 3v12m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></Icon>
-            <span>Export</span><span className="chevron">⌄</span>
+             <Icon><path d="M12 3v12m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></Icon>
+             <span>Export</span><span className="chevron"><Icon><path d="m6 9 6 6 6-6" /></Icon></span>
           </button>
            {exportOpen && <div className="export-menu" id="glyph-export-menu" role="menu" onKeyDown={handleMenuKeyDown}>
-             <button ref={(element) => { menuItemsRef.current[0] = element; }} onClick={() => { onExportPng(); setExportOpen(false); }} disabled={isExporting} role="menuitem"><span className="menu-icon">↓</span><span><b>{isExporting ? "Rendering PNG…" : "Export PNG"}</b><small>Download the current canvas</small></span><kbd>⌘ E</kbd></button>
-             <button ref={(element) => { menuItemsRef.current[1] = element; }} onClick={() => { onCopyImage(); setExportOpen(false); }} disabled={isCopyingImage} role="menuitem"><span className="menu-icon">▧</span><span><b>{isCopyingImage ? "Copying image…" : "Copy image"}</b><small>Send PNG to clipboard</small></span></button>
+             <button ref={(element) => { menuItemsRef.current[0] = element; }} onClick={() => { onExportPng(); setExportOpen(false); }} disabled={isExporting} role="menuitem"><span className="menu-icon"><Icon><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M5 20h14" /></Icon></span><span><b>{isExporting ? "Rendering PNG…" : "Export PNG"}</b><small>Download the current canvas</small></span><kbd>⌘ E</kbd></button>
+             <button ref={(element) => { menuItemsRef.current[1] = element; }} onClick={() => { onCopyImage(); setExportOpen(false); }} disabled={isCopyingImage} role="menuitem"><span className="menu-icon"><Icon><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h7A1.5 1.5 0 0 1 19 4.5v7A1.5 1.5 0 0 1 17.5 13H18" /></Icon></span><span><b>{isCopyingImage ? "Copying image…" : "Copy image"}</b><small>Send PNG to clipboard</small></span></button>
              <div className="menu-divider" />
-             <button ref={(element) => { menuItemsRef.current[2] = element; }} onClick={() => { onExportConfig(); setExportOpen(false); }} role="menuitem"><span className="menu-icon">✦</span><span><b>Export Glyph</b><small>Save code and styling as JSON</small></span></button>
-             <button ref={(element) => { menuItemsRef.current[3] = element; }} onClick={() => { onCopyCode(); setExportOpen(false); }} role="menuitem"><span className="menu-icon">&lt;/&gt;</span><span><b>Copy code</b><small>Copy the raw source</small></span><kbd>⌘ ⇧ C</kbd></button>
+             <button ref={(element) => { menuItemsRef.current[2] = element; }} onClick={() => { onExportConfig(); setExportOpen(false); }} role="menuitem"><span className="menu-icon"><Icon><path d="M6 3.5h8l4 4V20H6z" /><path d="M14 3.5V8h4M9 12h6M9 15.5h6" /></Icon></span><span><b>Export Glyph</b><small>Save code and styling as JSON</small></span></button>
           </div>}
         </div>
       </div>

@@ -1,9 +1,10 @@
-import { DM_Sans, Geist_Mono } from "next/font/google";
+import { Figtree, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const dmSans = DM_Sans({
+const figtree = Figtree({
   variable: "--font-ui",
   subsets: ["latin"],
+  weight: "variable",
 });
 
 const geistMono = Geist_Mono({
@@ -19,7 +20,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`${dmSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${figtree.variable} ${geistMono.variable} antialiased`}>
         {children}
       </body>
     </html>

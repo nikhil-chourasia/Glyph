@@ -1,4 +1,5 @@
 // Default editor state + named presets with a refined, minimalist aesthetic.
+import { DEFAULT_HIGHLIGHT_COLOR, DEFAULT_SOCIAL_IDENTITY, isAutomaticTitle, sanitizeHighlightColor, sanitizeSocialIdentity } from "./snapshot.js";
 
 export const SYNTAX_THEMES = {
   "glyph-dark": "Glyph Dark",
@@ -19,6 +20,12 @@ export const BACKGROUND_SWATCHES = [
   { id: "warm-neutral", label: "Warm Taupe", value: "linear-gradient(145deg, #242220, #171514)" },
   { id: "snow", label: "Minimal Light", value: "linear-gradient(145deg, #f1f5f9, #e2e8f0)" },
   { id: "aurora-subtle", label: "Subtle Dusk", value: "linear-gradient(145deg, #1a2238, #1c1936)" },
+  { id: "lavender", label: "Lavender", value: "linear-gradient(135deg, #ddd6fe, #a5b4fc)" },
+  { id: "seafoam", label: "Seafoam", value: "linear-gradient(135deg, #ccfbf1, #67e8f9)" },
+  { id: "sunset", label: "Sunset", value: "linear-gradient(135deg, #fdba74, #f9a8d4)" },
+  { id: "rose", label: "Rosewood", value: "linear-gradient(145deg, #572b42, #291a2e)" },
+  { id: "forest", label: "Forest", value: "linear-gradient(145deg, #204c40, #102b2a)" },
+  { id: "sand", label: "Warm Sand", value: "linear-gradient(135deg, #f5e6cf, #d6c3ad)" },
 ];
 
 export const ASPECT_RATIOS = [
@@ -34,7 +41,8 @@ export const FRAME_STYLES = ["macos", "windows", "minimal", "none"];
 export const FONT_FAMILIES = ["geist", "monospace"];
 
 export const DEFAULT_CONFIG = {
-  title: "untitled.py",
+  title: "untitled",
+  titleMode: "auto",
   language: "auto",
   showLineNumbers: false,
   showTrafficLights: true,
@@ -63,10 +71,12 @@ export const DEFAULT_CONFIG = {
   lineHeight: 1.5,
   ligatures: true,
   highlightedLines: "",
+  highlightColor: DEFAULT_HIGHLIGHT_COLOR,
   wrap: false,
   tabSize: 4,
   alignment: "center",
   innerPadding: 24,
+  socialIdentity: { ...DEFAULT_SOCIAL_IDENTITY },
 };
 
 export const PRESETS = {
@@ -217,13 +227,16 @@ const SUPPORTED_LANGUAGES = new Set(["auto", "javascript", "typescript", "xml", 
 
 /** Validates and merges an imported configuration object */
 export function sanitizeImportedConfig(data) {
-  if (!data || typeof data !== "object") {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Invalid config format: expected a JSON object");
   }
 
   const merged = { ...DEFAULT_CONFIG };
 
   if (typeof data.title === "string") merged.title = safeText(data.title, merged.title, 120);
+  // Legacy untitled filenames remain automatic; explicit new titles, including
+  // a deliberately entered "untitled.py", retain their custom mode.
+  merged.titleMode = data.titleMode === "custom" || !isAutomaticTitle(merged) ? "custom" : "auto";
   if (typeof data.language === "string" && SUPPORTED_LANGUAGES.has(data.language)) merged.language = data.language;
   if (typeof data.showLineNumbers === "boolean") merged.showLineNumbers = data.showLineNumbers;
   if (typeof data.showTrafficLights === "boolean") merged.showTrafficLights = data.showTrafficLights;
@@ -269,10 +282,12 @@ export function sanitizeImportedConfig(data) {
   merged.lineHeight = number(data.lineHeight, merged.lineHeight, 1, 3);
   if (typeof data.ligatures === "boolean") merged.ligatures = data.ligatures;
   if (typeof data.highlightedLines === "string") merged.highlightedLines = data.highlightedLines.replace(/[^0-9,\-\s]/g, "").slice(0, 200);
+  merged.highlightColor = sanitizeHighlightColor(data.highlightColor);
   if (typeof data.wrap === "boolean") merged.wrap = data.wrap;
-  merged.tabSize = number(data.tabSize, merged.tabSize, 2, 8);
+  merged.tabSize = Math.round(number(data.tabSize, merged.tabSize, 2, 8));
   if (["left", "center", "right"].includes(data.alignment)) merged.alignment = data.alignment;
   merged.innerPadding = number(data.innerPadding, merged.innerPadding, 0, 120);
+  merged.socialIdentity = sanitizeSocialIdentity(data.socialIdentity);
 
   return merged;
 }

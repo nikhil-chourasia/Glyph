@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Header from "./components/Header";
 import PreviewStage from "./components/PreviewStage";
 import Sidebar from "./components/Sidebar";
@@ -11,16 +11,8 @@ import {
   sanitizeImportedConfig,
 } from "./lib/presets";
 
-const DEFAULT_CODE = `def prepare_data(oecdBli, gdpPerCapita):
-    oecdBli = oecdBli.set_index('Country')
-    gdpPerCapita = gdpPerCapita.set_index('COUNTRY')
-    gdpPerCapita = gdpPerCapita.rename(columns={'2025': 'GDP per capita'})
-    gdpPerCapita = gdpPerCapita[['GDP per capita']]
-    oecdBli = oecdBli[oecdBli['Indicator'] == "Life satisfaction"]
-    oecdBli = oecdBli[['OBS_VALUE']]
-    fullStats = gdpPerCapita.join(oecdBli, how='inner')
-    fullStats = fullStats.rename(columns={'OBS_VALUE': 'Life satisfaction'})
-    return fullStats`;
+import { DEFAULT_CODE } from "./lib/sample";
+import { getExportBasename, getSnapshotTitle } from "./lib/snapshot";
 
 const STORAGE_KEY = "glyph_app_state_v1";
 
@@ -30,10 +22,11 @@ export default function Home() {
   const [activePreset, setActivePreset] = useState("default");
   const [themePreference, setThemePreference] = useState("system");
   const [resolvedTheme, setResolvedTheme] = useState("dark");
+  const [canvasMinimums, setCanvasMinimums] = useState({ width: 320, height: 200 });
   const configHistoryRef = useRef([]);
   const hasLoadedStateRef = useRef(false);
 
-  function setConfig(updater) {
+  const setConfig = useCallback((updater) => {
     setConfigState((previous) => {
       const next = typeof updater === "function" ? updater(previous) : updater;
       if (next !== previous && JSON.stringify(next) !== JSON.stringify(previous)) {
@@ -41,7 +34,7 @@ export default function Home() {
       }
       return next;
     });
-  }
+  }, []);
 
   function undoConfig() {
     const previous = configHistoryRef.current.pop();
@@ -85,7 +78,7 @@ export default function Home() {
     } finally {
       hasLoadedStateRef.current = true;
     }
-  }, []);
+  }, [setConfig]);
 
   // Persist to localStorage on change
   useEffect(() => {
@@ -128,11 +121,27 @@ export default function Home() {
   const [exportError, setExportError] = useState("");
 
   // Clean filename for export
-  const cleanTitle = useMemo(() => {
-    if (!config.title) return "glyph";
-    const withoutExt = config.title.replace(/\.[^/.]+$/, "").trim();
-    return withoutExt.length > 0 ? withoutExt : "glyph";
-  }, [config.title]);
+  const cleanTitle = getExportBasename(config);
+  const snapshotTitle = getSnapshotTitle(config, detectedLanguage);
+
+  async function renderPreview() {
+    if (!previewRef.current) throw new Error("Preview is not ready.");
+    if (document.fonts?.ready) await document.fonts.ready;
+    document.documentElement.dataset.glyphExporting = "true";
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const scale = Number(config.exportScale) || 2;
+      return await html2canvas(previewRef.current, {
+        backgroundColor: null,
+        scale,
+        useCORS: true,
+        logging: false,
+      });
+    } finally {
+      delete document.documentElement.dataset.glyphExporting;
+    }
+  }
 
   // Export as PNG
   async function handleExportPng() {
@@ -141,15 +150,8 @@ export default function Home() {
     setExportError("");
 
     try {
-      if (document.fonts?.ready) await document.fonts.ready;
-      const { default: html2canvas } = await import("html2canvas");
       const scale = Number(config.exportScale) || 2;
-      const canvas = await html2canvas(previewRef.current, {
-        backgroundColor: null,
-        scale,
-        useCORS: true,
-        logging: false,
-      });
+      const canvas = await renderPreview();
 
       const link = document.createElement("a");
       link.download = `${cleanTitle}.png`;
@@ -171,15 +173,7 @@ export default function Home() {
     setIsCopyingImage(true);
 
     try {
-      if (document.fonts?.ready) await document.fonts.ready;
-      const { default: html2canvas } = await import("html2canvas");
-      const scale = Number(config.exportScale) || 2;
-      const canvas = await html2canvas(previewRef.current, {
-        backgroundColor: null,
-        scale,
-        useCORS: true,
-        logging: false,
-      });
+      const canvas = await renderPreview();
 
       canvas.toBlob(async (blob) => {
         if (!blob) {
@@ -209,16 +203,6 @@ export default function Home() {
     }
   }
 
-  // Copy raw code to clipboard
-  async function handleCopyCode() {
-    try {
-      await navigator.clipboard.writeText(code);
-      addToast("Code copied to clipboard!", "success");
-    } catch {
-      addToast("Failed to copy code to clipboard.", "error");
-    }
-  }
-
   // Export Glyph Configuration (.glyph.json)
   function handleExportConfig() {
     try {
@@ -226,7 +210,7 @@ export default function Home() {
         name: "glyph-config",
         version: 1,
         exportedAt: new Date().toISOString(),
-        config,
+        config: sanitizeImportedConfig(config),
         code,
       };
 
@@ -325,7 +309,6 @@ export default function Home() {
         isExporting={isExporting}
         onCopyImage={handleCopyImage}
         isCopyingImage={isCopyingImage}
-        onCopyCode={handleCopyCode}
         onExportConfig={handleExportConfig}
         onTriggerImport={handleTriggerImport}
         theme={resolvedTheme}
@@ -343,7 +326,8 @@ export default function Home() {
           setConfig={setConfig}
           previewRef={previewRef}
           detectedLabel={detectedLabel}
-          onTrySample={() => setCode('const greeting = "Hello, world!";\nconsole.log(greeting);')}
+          snapshotTitle={snapshotTitle}
+          onCanvasMinimumsChange={setCanvasMinimums}
         />
 
         <Sidebar
@@ -352,12 +336,13 @@ export default function Home() {
           activePreset={activePreset}
           setActivePreset={setActivePreset}
           detectedLabel={detectedLabel}
+          snapshotTitle={snapshotTitle}
+          canvasMinimums={canvasMinimums}
           onExportPng={handleExportPng}
           isExporting={isExporting}
           exportError={exportError}
           onCopyImage={handleCopyImage}
           isCopyingImage={isCopyingImage}
-          onCopyCode={handleCopyCode}
           onExportConfig={handleExportConfig}
           onTriggerImport={handleTriggerImport}
           onResetAll={() => {
