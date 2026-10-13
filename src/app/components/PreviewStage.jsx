@@ -1,268 +1,145 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import CodeEditor from "./CodeEditor";
+import { LANGUAGE_LABELS } from "../lib/highlight";
+import { getBackground } from "../lib/presets";
+import "./preview.css";
 
-export default function PreviewStage({
-  code,
-  setCode,
-  highlightedHtml,
-  config,
-  setConfig,
-  previewRef,
-}) {
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
+const dimension = (value, fallback) => Math.max(160, Math.min(4096, Number(value) || fallback));
 
-  const windowRef = useRef(null);
-  const dragStartRef = useRef(null);
-  const resizeStartRef = useRef(null);
+export default function PreviewStage({ code, setCode, highlightedHtml, config, setConfig, previewRef, detectedLabel = "Plain Text", onTrySample }) {
+  const [dropError, setDropError] = useState("");
+  const editorInputRef = useRef(null);
+  const gestureRef = useRef(null);
+  const width = dimension(config.canvasWidth, 920);
+  const height = dimension(config.canvasHeight, 560);
+  const padding = Math.max(0, Math.min(Number(config.padding) || 0, (Math.min(width, height) - 80) / 2));
+  const frame = config.frameStyle || "macos";
+  const canvasBackground = getBackground({
+    ...config,
+    backgroundStart: config.gradientFrom ?? config.backgroundStart,
+    backgroundEnd: config.gradientTo ?? config.backgroundEnd,
+    backgroundAngle: config.gradientAngle ?? config.backgroundAngle,
+  });
 
-  // Dragging the console window by its titlebar
-  function handleMouseDownTitlebar(e) {
-    // Avoid triggering drag when interacting with window title input
-    if (e.target.tagName === "INPUT" || e.target.closest("input")) return;
-
-    e.preventDefault();
-    setIsDragging(true);
-    dragStartRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      initialX: position.x,
-      initialY: position.y,
-    };
+  function updateDimensions(nextWidth, nextHeight) {
+    let nextW = Math.round(dimension(nextWidth, width));
+    let nextH = Math.round(dimension(nextHeight, height));
+    if (config.aspectLock) {
+      const ratio = width / height;
+      if (nextWidth !== width) nextH = Math.round(nextW / ratio);
+      else nextW = Math.round(nextH * ratio);
+    }
+    nextW = dimension(nextW, width);
+    nextH = dimension(nextH, height);
+    setConfig((previous) => ({ ...previous, canvasWidth: nextW, canvasHeight: nextH, autoHeight: false }));
   }
 
-  useEffect(() => {
-    if (!isDragging) return;
-
-    function handleMouseMove(e) {
-      if (!dragStartRef.current || !previewRef.current || !windowRef.current) return;
-      const { startX, startY, initialX, initialY } = dragStartRef.current;
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
-
-      const canvasRect = previewRef.current.getBoundingClientRect();
-      const winRect = windowRef.current.getBoundingClientRect();
-      const pad = Number(config.padding) || 24;
-
-      // Maximum offset from center so window never leaves canvas bounds
-      const maxOffsetX = Math.max(0, (canvasRect.width - winRect.width) / 2 - pad);
-      const maxOffsetY = Math.max(0, (canvasRect.height - winRect.height) / 2 - pad);
-
-      const targetX = initialX + deltaX;
-      const targetY = initialY + deltaY;
-
-      const clampedX = Math.max(-maxOffsetX, Math.min(maxOffsetX, targetX));
-      const clampedY = Math.max(-maxOffsetY, Math.min(maxOffsetY, targetY));
-
-      setPosition({ x: clampedX, y: clampedY });
-    }
-
-    function handleMouseUp() {
-      setIsDragging(false);
-      dragStartRef.current = null;
-    }
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isDragging, config.padding, previewRef]);
-
-  // Resizing the console window with strict canvas boundary limits
-  function handleMouseDownResize(e, direction = "both") {
-    e.preventDefault();
-    setIsResizing(true);
-    resizeStartRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      startWidth: windowRef.current?.offsetWidth || config.canvasWidth,
-      startHeight: windowRef.current?.offsetHeight || config.canvasHeight,
-      direction,
-    };
+  function resize(nextWidth, nextHeight) {
+    updateDimensions(nextWidth, nextHeight);
   }
 
-  useEffect(() => {
-    if (!isResizing) return;
+  function startGesture(event, mode) {
+    if (event.target.closest("input")) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    gestureRef.current = { mode, x: event.clientX, y: event.clientY, width, height };
+  }
 
-    function handleMouseMove(e) {
-      if (!resizeStartRef.current || !previewRef.current) return;
-      const { startX, startY, startWidth, startHeight, direction } = resizeStartRef.current;
-      const deltaX = (e.clientX - startX) * 2;
-      const deltaY = (e.clientY - startY) * 2;
+  function moveGesture(event) {
+    const start = gestureRef.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    resize(start.width + dx, start.mode === "width" ? start.height : start.height + dy);
+  }
 
-      const canvasRect = previewRef.current.getBoundingClientRect();
-      const pad = Number(config.padding) || 24;
+  const gestureEvents = {
+    onPointerMove: moveGesture,
+    onPointerUp: () => { gestureRef.current = null; },
+    onPointerCancel: () => { gestureRef.current = null; },
+    onLostPointerCapture: () => { gestureRef.current = null; },
+  };
 
-      // Strict limit: cannot stretch beyond canvas boundaries minus padding and position offset
-      const maxLimitWidth = Math.max(340, canvasRect.width - (pad * 2) - Math.abs(position.x) * 2);
-      const maxLimitHeight = Math.max(180, canvasRect.height - (pad * 2) - Math.abs(position.y) * 2);
+  function resizeKey(event, mode) {
+    const step = event.shiftKey ? 10 : 1;
+    const dx = event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0;
+    const dy = mode === "both" ? event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0 : 0;
+    if (dx || dy) { event.preventDefault(); resize(width + dx, height + dy); }
+  }
 
-      const requestedWidth = startWidth + deltaX;
-      const clampedWidth = Math.min(maxLimitWidth, Math.max(320, requestedWidth));
-
-      if (direction === "width") {
-        setConfig((prev) => ({
-          ...prev,
-          canvasWidth: Math.round(clampedWidth),
-        }));
-      } else {
-        const requestedHeight = startHeight + deltaY;
-        const clampedHeight = Math.min(maxLimitHeight, Math.max(180, requestedHeight));
-        setConfig((prev) => ({
-          ...prev,
-          canvasWidth: Math.round(clampedWidth),
-          canvasHeight: Math.round(clampedHeight),
-          autoHeight: false,
-        }));
+  async function handleDrop(event) {
+    event.preventDefault();
+    setDropError("");
+    const file = event.dataTransfer.files[0];
+    if (!file) {
+      const text = event.dataTransfer.getData("text/plain");
+      if (text) setCode(text);
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) { setDropError("Choose a text or code file smaller than 2 MB."); return; }
+    try {
+      const text = await file.text();
+      if (text.includes("\0") || /^(image|audio|video)\//.test(file.type)) {
+        setDropError("That file does not look like text. Drop a code or text file instead.");
+        return;
       }
-    }
-
-    function handleMouseUp() {
-      setIsResizing(false);
-      resizeStartRef.current = null;
-    }
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isResizing, position, config.padding, setConfig, previewRef]);
-
-  // Re-check and clamp console window dimensions if padding or window size changes
-  useEffect(() => {
-    if (!previewRef.current || !windowRef.current) return;
-    const canvasRect = previewRef.current.getBoundingClientRect();
-    const pad = Number(config.padding) || 24;
-    const maxLimitWidth = Math.max(340, canvasRect.width - (pad * 2));
-
-    if (config.canvasWidth > maxLimitWidth) {
-      setConfig((prev) => ({
-        ...prev,
-        canvasWidth: Math.round(maxLimitWidth),
-      }));
-    }
-  }, [config.padding, config.canvasWidth, setConfig, previewRef]);
+      setCode(text);
+      setConfig((previous) => ({ ...previous, title: file.name }));
+    } catch { setDropError("Could not read this file. Try pasting its text instead."); }
+  }
 
   return (
-    <div className="canvas-stage-wrapper">
-      {/* Viewport canvas filling entire remaining space without overflow */}
-      <div className="canvas-viewport">
-        {/* Captured Target for html2canvas */}
-        <div
-          className="preview-card"
-          ref={previewRef}
-          style={{
-            background: config.background,
-            padding: `${config.padding}px`,
-          }}
-        >
-          {/* Draggable & Resizable Console Window */}
-          <div
-            ref={windowRef}
-            className="window"
-            data-syntax-theme={config.syntaxTheme}
-            style={{
-              width: `${config.canvasWidth}px`,
-              maxWidth: `calc(100% - ${config.padding * 2}px)`,
-              height: config.autoHeight ? "auto" : `${config.canvasHeight}px`,
-              maxHeight: `calc(100% - ${config.padding * 2}px)`,
-              borderRadius: `${config.cornerRadius}px`,
-              boxShadow: `0 14px 40px rgba(0,0,0,${config.shadow / 100})`,
-              transform: `translate(${position.x}px, ${position.y}px)`,
-            }}
-          >
-            {/* Titlebar with theme colors & drag handle */}
-            <div
-              className={`titlebar ${isDragging ? "dragging" : ""}`}
-              onMouseDown={handleMouseDownTitlebar}
-              title="Click and drag to move window"
-            >
-              {config.showTrafficLights ? (
-                <div className="traffic">
-                  <div className="dot red" />
-                  <div className="dot yellow" />
-                  <div className="dot green" />
-                </div>
-              ) : (
-                <div style={{ width: 44 }} />
-              )}
-
-              <div className="titlebar-center">
-                <input
-                  type="text"
-                  className="window-title-input"
-                  value={config.title}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, title: e.target.value }))
-                  }
-                  placeholder="untitled.py"
-                  aria-label="Window title"
-                  spellCheck={false}
-                />
+    <section className="glyph-preview-stage" aria-label="Code snapshot workspace"
+      onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={handleDrop}
+      onPaste={(event) => {
+        if (event.target.closest("textarea, input")) return;
+        const text = event.clipboardData.getData("text/plain");
+        if (text) { event.preventDefault(); setCode(text); }
+      }}>
+      <div className="glyph-preview-toolbar">
+        <div className="glyph-preview-language">
+          <span className="glyph-detected-language">{config.language === "auto" || !config.language ? "Detected" : "Language"}: {detectedLabel}</span>
+          <select aria-label="Code language" value={config.language || "auto"} onChange={(event) => setConfig((previous) => ({ ...previous, language: event.target.value }))}>
+            {Object.entries(LANGUAGE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </div>
+        <span className="glyph-preview-size">{width} × {height} px</span>
+      </div>
+      {!code && <div className="glyph-preview-empty">
+        <div role="button" tabIndex={0} className="glyph-empty-copy" onClick={() => editorInputRef.current?.focus()} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); editorInputRef.current?.focus(); } }}><strong>Your next great snippet starts here.</strong><p>Paste with ⌘ / Ctrl + V, drop a text file, or start typing below.</p></div>
+        <button type="button" onClick={() => onTrySample ? onTrySample() : setCode('const greeting = "Hello, world!";\nconsole.log(greeting);')}>Try a sample</button>
+      </div>}
+      {dropError && <p className="glyph-preview-error" role="alert">{dropError}</p>}
+      <div className="glyph-preview-workspace" tabIndex={0} aria-label="Scrollable preview. Paste code or drop a text file here.">
+        <div className="glyph-preview-scroll-area">
+          <div className="glyph-canvas-shell" style={{ width, height }}>
+            {/* Only this fixed-size element is exported. Workspace and handles are siblings. */}
+              <div ref={previewRef} className="glyph-capture" style={{ width, height, padding, background: canvasBackground, justifyContent: "center" }}>
+              <div className="window glyph-preview-window" data-syntax-theme={config.syntaxTheme || "glyph-dark"}
+                style={{ borderRadius: `${config.cornerRadius ?? 14}px`, border: config.showBorder === false ? "none" : "1px solid var(--titlebar-border, rgba(255,255,255,.12))", boxShadow: `0 ${config.shadowOffset ?? 14}px ${config.shadowBlur ?? 40}px rgba(0,0,0,${Math.max(0, Math.min(100, config.shadowOpacity ?? config.shadow ?? 45)) / 100})`, height: config.autoHeight === false ? "100%" : "auto" }}>
+                 {frame !== "none" && <div className={`glyph-window-titlebar glyph-frame-${frame}`}>
+                  {frame === "macos" && config.showTrafficLights !== false && <span className="glyph-window-traffic" aria-hidden="true"><i /><i /><i /></span>}
+                  <div className="glyph-window-title">
+                    <span>{config.title || "untitled"}</span>
+                    <input value={config.title || ""} onChange={(event) => setConfig((previous) => ({ ...previous, title: event.target.value }))} aria-label="Window title" placeholder="untitled" spellCheck={false} data-html2canvas-ignore="true" />
+                  </div>
+                  {frame === "windows" && <span className="glyph-window-controls" aria-hidden="true">─ □ ×</span>}
+                </div>}
+                <CodeEditor code={code} highlightedHtml={highlightedHtml} onChange={setCode} inputRef={editorInputRef} fontSize={config.fontSize} showLineNumbers={config.showLineNumbers}
+                  fontFamily={config.fontFamily} lineHeight={config.lineHeight} ligatures={config.ligatures} highlightedLines={config.highlightedLines} wrap={config.wrap} tabSize={config.tabSize} innerPadding={config.innerPadding} />
               </div>
-
-              {/* Right drag grip indicator / spacer */}
-              <div
-                style={{
-                  width: 44,
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  alignItems: "center",
-                  opacity: 0.35,
-                  cursor: "grab",
-                }}
-                aria-hidden="true"
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 14, height: 14 }}>
-                  <circle cx="9" cy="6" r="1.5" />
-                  <circle cx="15" cy="6" r="1.5" />
-                  <circle cx="9" cy="12" r="1.5" />
-                  <circle cx="15" cy="12" r="1.5" />
-                  <circle cx="9" cy="18" r="1.5" />
-                  <circle cx="15" cy="18" r="1.5" />
-                </svg>
-              </div>
+              {config.showWatermark && <div className="glyph-preview-watermark">Made with Glyph</div>}
             </div>
-
-            {/* Editable code surface */}
-            <CodeEditor
-              code={code}
-              highlightedHtml={highlightedHtml}
-              onChange={setCode}
-              fontSize={config.fontSize}
-              showLineNumbers={config.showLineNumbers}
-            />
-
-            {/* Subtle resize handles bounded to canvas */}
-            <div
-              className="resize-handle-right"
-              data-html2canvas-ignore="true"
-              onMouseDown={(e) => handleMouseDownResize(e, "width")}
-              title="Drag horizontally to resize width"
-            />
-            <div
-              className="resize-handle-corner"
-              data-html2canvas-ignore="true"
-              onMouseDown={(e) => handleMouseDownResize(e, "both")}
-              title="Drag to resize width and height"
-            />
+            <button type="button" className="glyph-canvas-resize glyph-resize-width" aria-label="Resize canvas width. Use left and right arrows, Shift for 10 pixels." onPointerDown={(event) => startGesture(event, "width")} onKeyDown={(event) => resizeKey(event, "width")} {...gestureEvents} />
+            <button type="button" className="glyph-canvas-resize glyph-resize-corner" aria-label="Resize canvas. Use arrow keys, Shift for 10 pixels." onPointerDown={(event) => startGesture(event, "both")} onKeyDown={(event) => resizeKey(event, "both")} {...gestureEvents}>↘</button>
           </div>
-
-          {/* Minimal Watermark */}
-          {config.showWatermark && (
-            <div className="preview-watermark">
-              Made with Glyph
-            </div>
-          )}
         </div>
       </div>
-    </div>
+      <div className="glyph-preview-footer">
+        <span>100% preview · Scroll to explore · Esc then Tab leaves the editor</span>
+      </div>
+    </section>
   );
 }

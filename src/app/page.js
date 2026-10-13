@@ -26,8 +26,27 @@ const STORAGE_KEY = "glyph_app_state_v1";
 
 export default function Home() {
   const [code, setCode] = useState(DEFAULT_CODE);
-  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [config, setConfigState] = useState(DEFAULT_CONFIG);
   const [activePreset, setActivePreset] = useState("default");
+  const [themePreference, setThemePreference] = useState("system");
+  const [resolvedTheme, setResolvedTheme] = useState("dark");
+  const configHistoryRef = useRef([]);
+  const hasLoadedStateRef = useRef(false);
+
+  function setConfig(updater) {
+    setConfigState((previous) => {
+      const next = typeof updater === "function" ? updater(previous) : updater;
+      if (next !== previous && JSON.stringify(next) !== JSON.stringify(previous)) {
+        configHistoryRef.current = [...configHistoryRef.current.slice(-49), previous];
+      }
+      return next;
+    });
+  }
+
+  function undoConfig() {
+    const previous = configHistoryRef.current.pop();
+    if (previous) setConfigState(previous);
+  }
 
   // Toast notifications
   const [toasts, setToasts] = useState([]);
@@ -48,7 +67,7 @@ export default function Home() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.code && typeof parsed.code === "string") {
+        if (typeof parsed.code === "string") {
           setCode(parsed.code);
         }
         if (parsed.config && typeof parsed.config === "object") {
@@ -57,23 +76,41 @@ export default function Home() {
         if (parsed.activePreset) {
           setActivePreset(parsed.activePreset);
         }
+        if (["system", "light", "dark"].includes(parsed.themePreference || parsed.theme)) {
+          setThemePreference(parsed.themePreference || parsed.theme);
+        }
       }
     } catch {
       // ignore localStorage parse issues
+    } finally {
+      hasLoadedStateRef.current = true;
     }
   }, []);
 
   // Persist to localStorage on change
   useEffect(() => {
+    if (!hasLoadedStateRef.current) return;
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ code, config, activePreset })
+        JSON.stringify({ code, config, activePreset, themePreference })
       );
     } catch {
       // ignore storage write errors
     }
-  }, [code, config, activePreset]);
+  }, [code, config, activePreset, themePreference]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: light)");
+    const applyTheme = () => {
+      const nextTheme = themePreference === "system" ? (media.matches ? "light" : "dark") : themePreference;
+      setResolvedTheme(nextTheme);
+      document.documentElement.dataset.theme = nextTheme;
+    };
+    applyTheme();
+    media.addEventListener?.("change", applyTheme);
+    return () => media.removeEventListener?.("change", applyTheme);
+  }, [themePreference]);
 
   // Syntax highlighting & language detection
   const { html: highlightedHtml, detectedLanguage } = useMemo(
@@ -104,6 +141,7 @@ export default function Home() {
     setExportError("");
 
     try {
+      if (document.fonts?.ready) await document.fonts.ready;
       const { default: html2canvas } = await import("html2canvas");
       const scale = Number(config.exportScale) || 2;
       const canvas = await html2canvas(previewRef.current, {
@@ -133,6 +171,7 @@ export default function Home() {
     setIsCopyingImage(true);
 
     try {
+      if (document.fonts?.ready) await document.fonts.ready;
       const { default: html2canvas } = await import("html2canvas");
       const scale = Number(config.exportScale) || 2;
       const canvas = await html2canvas(previewRef.current, {
@@ -212,7 +251,7 @@ export default function Home() {
     try {
       const importedConfig = sanitizeImportedConfig(data.config || data);
       setConfig(importedConfig);
-      if (data.code && typeof data.code === "string") {
+      if (typeof data.code === "string") {
         setCode(data.code);
       }
       setActivePreset(null);
@@ -244,9 +283,11 @@ export default function Home() {
     e.target.value = "";
   }
 
-  // Keyboard shortcuts (Cmd/Ctrl + E to export PNG, Cmd/Ctrl + S to export PNG)
+  // Keyboard shortcuts (Cmd/Ctrl + E to export PNG, Cmd/Ctrl + Shift + C to copy image)
   const exportPngRef = useRef(handleExportPng);
   exportPngRef.current = handleExportPng;
+  const copyImageRef = useRef(handleCopyImage);
+  copyImageRef.current = handleCopyImage;
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -254,10 +295,14 @@ export default function Home() {
       if (isMeta && (e.key === "e" || e.key === "E")) {
         e.preventDefault();
         exportPngRef.current?.();
-      } else if (isMeta && (e.key === "s" || e.key === "S")) {
-        e.preventDefault();
-        exportPngRef.current?.();
-      }
+      } else if (isMeta && e.shiftKey && (e.key === "c" || e.key === "C")) {
+         e.preventDefault();
+         copyImageRef.current?.();
+       } else if (isMeta && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+         if (e.target.closest?.("input, textarea, [contenteditable='true']")) return;
+         e.preventDefault();
+         undoConfig();
+       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -282,7 +327,10 @@ export default function Home() {
         isCopyingImage={isCopyingImage}
         onCopyCode={handleCopyCode}
         onExportConfig={handleExportConfig}
-        onImportConfig={handleImportConfig}
+        onTriggerImport={handleTriggerImport}
+        theme={resolvedTheme}
+        themePreference={themePreference}
+        onToggleTheme={() => setThemePreference((current) => current === "system" ? "light" : current === "light" ? "dark" : "system")}
       />
 
       {/* Main Workspace Body */}
@@ -294,6 +342,8 @@ export default function Home() {
           config={config}
           setConfig={setConfig}
           previewRef={previewRef}
+          detectedLabel={detectedLabel}
+          onTrySample={() => setCode('const greeting = "Hello, world!";\nconsole.log(greeting);')}
         />
 
         <Sidebar
@@ -310,6 +360,9 @@ export default function Home() {
           onCopyCode={handleCopyCode}
           onExportConfig={handleExportConfig}
           onTriggerImport={handleTriggerImport}
+          onResetAll={() => {
+            setConfig({ ...DEFAULT_CONFIG });
+          }}
         />
       </div>
 

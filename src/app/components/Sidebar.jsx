@@ -1,518 +1,62 @@
 "use client";
 
-import {
-  SYNTAX_THEMES,
-  BACKGROUND_SWATCHES,
-  ASPECT_RATIOS,
-  PRESETS,
-  DEFAULT_CONFIG,
-} from "../lib/presets";
+import { useMemo, useState } from "react";
+import { SYNTAX_THEMES, BACKGROUND_SWATCHES, ASPECT_RATIOS, PRESETS, DEFAULT_CONFIG, FRAME_STYLES, FONT_FAMILIES, getBackground, sanitizeImportedConfig } from "../lib/presets";
 import { LANGUAGE_LABELS, LANGUAGE_OPTIONS } from "../lib/highlight";
 
-const THEME_PREVIEW_COLORS = {
-  "glyph-dark": ["#c084fc", "#4ade80", "#60a5fa"],
-  "dracula": ["#ff79c6", "#50fa7b", "#8be9fd"],
-  "night-owl": ["#c792ea", "#ecc48d", "#82aaff"],
-  "nord": ["#81a1c1", "#a3be8c", "#88c0d0"],
-  "glyph-light": ["#7c3aed", "#059669", "#2563eb"],
-};
+const CUSTOM_KEY = "glyph_custom_presets_v1";
+function readCustomPresets() {
+  if (typeof window === "undefined") return {};
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_KEY) || "{}");
+    return Object.fromEntries(Object.entries(saved).filter(([, item]) => item && typeof item === "object").map(([id, item]) => [id, { ...item, config: sanitizeImportedConfig(item.config) }]));
+  } catch { return {}; }
+}
+const THEME_PREVIEW_COLORS = { "glyph-dark": ["#b6a1ff", "#82d9ad", "#8bb8ff"], dracula: ["#ff79c6", "#50fa7b", "#8be9fd"], "night-owl": ["#c792ea", "#ecc48d", "#82aaff"], nord: ["#81a1c1", "#a3be8c", "#88c0d0"], "glyph-light": ["#7c3aed", "#059669", "#2563eb"] };
 
-export default function Sidebar({
-  config,
-  setConfig,
-  activePreset,
-  setActivePreset,
-  detectedLabel,
-  onExportPng,
-  isExporting,
-  exportError,
-  onCopyImage,
-  isCopyingImage,
-  onCopyCode,
-  onExportConfig,
-  onTriggerImport,
-}) {
-  function updateConfig(field, value) {
+export function ControlGroup({ label, children }) { return <div className="control-group"><span className="field-label">{label}</span>{children}</div>; }
+export function Toggle({ label, checked, onChange }) { return <button type="button" className="toggle-row" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}><span>{label}</span><span className={`switch-track ${checked ? "active" : ""}`}><span className="switch-thumb" /></span></button>; }
+export function Segmented({ label, value, options, onChange }) { return <ControlGroup label={label}><div className={`segmented ${label === "Aspect ratio" ? "aspect-ratio-segmented" : ""}`} role="group" aria-label={label}>{options.map(([key, text]) => <button type="button" key={key} className={value === key ? "active" : ""} aria-pressed={value === key} onClick={() => onChange(key)}>{text}</button>)}</div></ControlGroup>; }
+export function Slider({ label, value, min, max, step = 1, suffix = "", onChange }) { const change = (raw) => { const next = Number(raw); if (Number.isFinite(next)) onChange(Math.max(Number(min), Math.min(Number(max), next))); }; return <label className="field-col"><span className="field-label"><span>{label}</span><output>{value}{suffix}</output></span><div className="slider-input-row"><input aria-label={label} type="range" min={min} max={max} step={step} value={value} onChange={(e) => change(e.target.value)} /><input className="number-input" aria-label={`${label} value`} type="number" min={min} max={max} step={step} value={value} onChange={(e) => change(e.target.value)} /></div></label>; }
+export function ColorInput({ label, value, onChange }) { const color = /^#[0-9a-f]{3,8}$/i.test(value) ? value : "#181920"; return <label className="field-col"><span className="field-label">{label}</span><div className="custom-color-row"><input type="color" className="color-picker-input" value={color} onChange={(e) => onChange(e.target.value)} aria-label={`${label} picker`} /><input className="text-input" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} /></div></label>; }
+
+function Section({ id, title, hint, open, onToggle, onReset, children }) { return <section className={`control-section ${open ? "is-open" : ""}`}><button className="section-trigger" onClick={onToggle} aria-expanded={open} aria-controls={`section-${id}`}><span className="section-heading"><span className="section-index">{id}</span><span>{title}</span></span><span className="section-hint">{open ? "" : hint}<span className="section-chevron">{open ? "−" : "+"}</span></span></button>{open && <div className="section-body" id={`section-${id}`}>{children}{onReset && <button className="reset-link" onClick={onReset}>Reset section</button>}</div>}</section>; }
+
+export default function Sidebar({ config, setConfig, activePreset, setActivePreset, detectedLabel, onResetAll }) {
+  const [open, setOpen] = useState({ presets: true, canvas: true, background: true, window: false, code: true, layout: false, language: false });
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [custom, setCustom] = useState(readCustomPresets);
+  const [presetName, setPresetName] = useState("");
+  const allPresets = useMemo(() => ({ ...PRESETS, ...custom }), [custom]);
+  const update = (field, value) => { setActivePreset(null); setConfig((prev) => ({ ...prev, [field]: value })); };
+  const toggle = (key) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  const applyPreset = (key) => { setActivePreset(key); setConfig(sanitizeImportedConfig(allPresets[key].config)); };
+  const reset = () => { setActivePreset("default"); if (onResetAll) onResetAll(); else setConfig({ ...DEFAULT_CONFIG }); };
+  const resetGroup = (keys) => { setActivePreset(null); setConfig((prev) => ({ ...prev, ...keys.reduce((next, key) => ({ ...next, [key]: DEFAULT_CONFIG[key] }), {}) })); };
+  const updateDimension = (field, value) => {
+    const next = Math.max(field === "canvasWidth" ? 320 : 200, Math.min(field === "canvasWidth" ? 2400 : 2000, Number(value) || (field === "canvasWidth" ? 920 : 560)));
     setActivePreset(null);
-    setConfig((prev) => ({ ...prev, [field]: value }));
-  }
+    setConfig((previous) => {
+      if (!previous.aspectLock) return { ...previous, [field]: next, autoHeight: false };
+      const ratio = previous.canvasWidth / previous.canvasHeight;
+      return field === "canvasWidth"
+        ? { ...previous, canvasWidth: next, canvasHeight: Math.max(200, Math.min(2000, Math.round(next / ratio))), autoHeight: false }
+        : { ...previous, canvasWidth: Math.max(320, Math.min(2400, Math.round(next * ratio))), canvasHeight: next, autoHeight: false };
+    });
+  };
+  const selectRatio = (ratio) => { setActivePreset(null); if (ratio.id === "auto") update("autoHeight", true); else setConfig((prev) => ({ ...prev, canvasWidth: ratio.width, canvasHeight: ratio.height, autoHeight: false })); };
+  const savePreset = () => { const label = presetName.trim().slice(0, 40); if (!label) return; const id = `custom-${Date.now()}`; const next = { ...custom, [id]: { id, label, description: "Saved locally", config: sanitizeImportedConfig(config) } }; setCustom(next); setPresetName(""); try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch { /* storage is optional */ } };
+  const currentLang = config.language === "auto" ? `Auto · ${detectedLabel}` : (LANGUAGE_LABELS[config.language] || config.language);
+  const frameOptions = FRAME_STYLES.map((x) => [x, x === "macos" ? "macOS" : x[0].toUpperCase() + x.slice(1)]);
 
-  function handleApplyPreset(presetKey) {
-    const preset = PRESETS[presetKey];
-    if (!preset) return;
-    setActivePreset(presetKey);
-    setConfig((prev) => ({
-      ...prev,
-      ...preset.config,
-    }));
-  }
-
-  function handleReset() {
-    setActivePreset("default");
-    setConfig({ ...DEFAULT_CONFIG });
-  }
-
-  function handleAspectRatioSelect(ratio) {
-    if (ratio.id === "auto") {
-      setConfig((prev) => ({
-        ...prev,
-        autoHeight: true,
-      }));
-    } else {
-      setConfig((prev) => ({
-        ...prev,
-        canvasWidth: ratio.width,
-        canvasHeight: ratio.height,
-        autoHeight: false,
-      }));
-    }
-    setActivePreset(null);
-  }
-
-  const currentLangDisplay =
-    config.language === "auto" ? `Auto: ${detectedLabel}` : (LANGUAGE_LABELS[config.language] || config.language);
-
-  return (
-    <aside className="right-sidebar">
-      {/* Inspector Top Bar with Language Mark */}
-      <div className="sidebar-header">
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="sidebar-title">Inspector</span>
-          {/* Language mark moved from code box to inspector header */}
-          <span className="lang-chip" title={`Language: ${currentLangDisplay}`}>
-            {currentLangDisplay}
-          </span>
-        </div>
-        <button
-          className="btn subtle"
-          onClick={handleReset}
-          title="Reset to defaults"
-          style={{ fontSize: 11 }}
-        >
-          Reset
-        </button>
-      </div>
-
-      <div className="sidebar-content">
-        {/* Section 1: Presets */}
-        <div className="inspector-section">
-          <div className="section-label">
-            <span>Presets</span>
-          </div>
-          <div className="preset-grid">
-            {Object.entries(PRESETS).map(([key, item]) => (
-              <button
-                key={key}
-                type="button"
-                className={`preset-card ${activePreset === key ? "active" : ""}`}
-                onClick={() => handleApplyPreset(key)}
-              >
-                <div className="preset-name">{item.label}</div>
-                <div className="preset-desc">{item.description}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Section 2: Frame & Canvas */}
-        <div className="inspector-section">
-          <div className="section-label">
-            <span>Frame & Canvas</span>
-          </div>
-
-          {/* Aspect Ratio */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Aspect Ratio</span>
-            </div>
-            <div className="aspect-pill-group">
-              {ASPECT_RATIOS.map((ratio) => (
-                <button
-                  key={ratio.id}
-                  type="button"
-                  className={`aspect-pill ${
-                    ratio.id === "auto" && config.autoHeight
-                      ? "active"
-                      : !config.autoHeight &&
-                        config.canvasWidth === ratio.width &&
-                        config.canvasHeight === ratio.height
-                      ? "active"
-                      : ""
-                  }`}
-                  onClick={() => handleAspectRatioSelect(ratio)}
-                >
-                  {ratio.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Width */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Width</span>
-              <span className="field-value-badge">{config.canvasWidth}px</span>
-            </div>
-            <input
-              type="range"
-              min="440"
-              max="1800"
-              step="10"
-              value={config.canvasWidth}
-              onChange={(e) => updateConfig("canvasWidth", Number(e.target.value))}
-            />
-          </div>
-
-          {/* Auto Height */}
-          <label className="switch-label">
-            <span>Auto Height</span>
-            <div
-              className={`switch-track ${config.autoHeight ? "active" : ""}`}
-              onClick={() => updateConfig("autoHeight", !config.autoHeight)}
-            >
-              <div className="switch-thumb" />
-            </div>
-          </label>
-
-          {!config.autoHeight && (
-            <div className="field-col">
-              <div className="field-label">
-                <span>Height</span>
-                <span className="field-value-badge">{config.canvasHeight}px</span>
-              </div>
-              <input
-                type="range"
-                min="240"
-                max="1400"
-                step="10"
-                value={config.canvasHeight}
-                onChange={(e) => updateConfig("canvasHeight", Number(e.target.value))}
-              />
-            </div>
-          )}
-
-          {/* Padding */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Padding</span>
-              <span className="field-value-badge">{config.padding}px</span>
-            </div>
-            <input
-              type="range"
-              min="16"
-              max="120"
-              step="4"
-              value={config.padding}
-              onChange={(e) => updateConfig("padding", Number(e.target.value))}
-            />
-          </div>
-
-          {/* Backdrop Swatches */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Backdrop</span>
-            </div>
-            <div className="swatches-grid">
-              {BACKGROUND_SWATCHES.map((swatch) => (
-                <button
-                  key={swatch.id}
-                  type="button"
-                  className={`swatch-btn ${config.background === swatch.value ? "active" : ""}`}
-                  style={{ background: swatch.value }}
-                  title={swatch.label}
-                  onClick={() => updateConfig("background", swatch.value)}
-                >
-                  {config.background === swatch.value && (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Custom Color Input */}
-          <div className="field-col">
-            <div className="custom-color-row">
-              <input
-                type="color"
-                className="color-picker-input"
-                value={config.background.startsWith("#") ? config.background : "#181920"}
-                onChange={(e) => updateConfig("background", e.target.value)}
-                title="Pick a solid color"
-              />
-              <input
-                type="text"
-                className="text-input"
-                value={config.background}
-                onChange={(e) => updateConfig("background", e.target.value)}
-                placeholder="e.g. #0c0d11 or linear-gradient(...)"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Section 3: Window Chrome */}
-        <div className="inspector-section">
-          <div className="section-label">
-            <span>Window Chrome</span>
-          </div>
-
-          {/* Filename */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Filename</span>
-            </div>
-            <input
-              type="text"
-              className="text-input"
-              value={config.title}
-              onChange={(e) => updateConfig("title", e.target.value)}
-              placeholder="untitled.py"
-            />
-          </div>
-
-          {/* Traffic Lights Toggle */}
-          <label className="switch-label">
-            <span>Traffic Lights</span>
-            <div
-              className={`switch-track ${config.showTrafficLights ? "active" : ""}`}
-              onClick={() => updateConfig("showTrafficLights", !config.showTrafficLights)}
-            >
-              <div className="switch-thumb" />
-            </div>
-          </label>
-
-          {/* Line Numbers Toggle */}
-          <label className="switch-label">
-            <span>Line Numbers</span>
-            <div
-              className={`switch-track ${config.showLineNumbers ? "active" : ""}`}
-              onClick={() => updateConfig("showLineNumbers", !config.showLineNumbers)}
-            >
-              <div className="switch-thumb" />
-            </div>
-          </label>
-
-          {/* Watermark Toggle */}
-          <label className="switch-label">
-            <span>Watermark</span>
-            <div
-              className={`switch-track ${config.showWatermark ? "active" : ""}`}
-              onClick={() => updateConfig("showWatermark", !config.showWatermark)}
-            >
-              <div className="switch-thumb" />
-            </div>
-          </label>
-        </div>
-
-        {/* Section 4: Style & Typography */}
-        <div className="inspector-section">
-          <div className="section-label">
-            <span>Style & Typography</span>
-          </div>
-
-          {/* Syntax Themes */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Syntax Theme</span>
-            </div>
-            <div className="theme-select-grid">
-              {Object.entries(SYNTAX_THEMES).map(([themeKey, themeLabel]) => (
-                <button
-                  key={themeKey}
-                  type="button"
-                  className={`theme-card ${config.syntaxTheme === themeKey ? "active" : ""}`}
-                  onClick={() => updateConfig("syntaxTheme", themeKey)}
-                >
-                  <div className="theme-card-left">
-                    <div className="theme-preview-dots">
-                      {(THEME_PREVIEW_COLORS[themeKey] || ["#999", "#888", "#777"]).map((c, i) => (
-                        <div
-                          key={i}
-                          className="theme-preview-dot"
-                          style={{ background: c }}
-                        />
-                      ))}
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 500 }}>{themeLabel}</span>
-                  </div>
-                  {config.syntaxTheme === themeKey && (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13, color: "#ffffff" }}>
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Font Size */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Font Size</span>
-              <span className="field-value-badge">{config.fontSize}px</span>
-            </div>
-            <input
-              type="range"
-              min="11"
-              max="26"
-              step="1"
-              value={config.fontSize}
-              onChange={(e) => updateConfig("fontSize", Number(e.target.value))}
-            />
-          </div>
-
-          {/* Corner Radius */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Corner Radius</span>
-              <span className="field-value-badge">{config.cornerRadius}px</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="36"
-              step="2"
-              value={config.cornerRadius}
-              onChange={(e) => updateConfig("cornerRadius", Number(e.target.value))}
-            />
-          </div>
-
-          {/* Shadow Intensity */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Shadow</span>
-              <span className="field-value-badge">{config.shadow}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              value={config.shadow}
-              onChange={(e) => updateConfig("shadow", Number(e.target.value))}
-            />
-          </div>
-        </div>
-
-        {/* Section 5: Language Selection */}
-        <div className="inspector-section">
-          <div className="section-label">
-            <span>Language</span>
-            <span className="lang-chip">{currentLangDisplay}</span>
-          </div>
-          <div className="field-col">
-            <select
-              className="select-input"
-              value={config.language}
-              onChange={(e) => updateConfig("language", e.target.value)}
-            >
-              <option value="auto">Auto-detect ({detectedLabel})</option>
-              <optgroup label="Supported Languages">
-                {LANGUAGE_OPTIONS.map((langKey) => (
-                  <option key={langKey} value={langKey}>
-                    {LANGUAGE_LABELS[langKey] || langKey}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </div>
-        </div>
-
-        {/* Section 6: Export & Share */}
-        <div className="inspector-section">
-          <div className="section-label">
-            <span>Export & Share</span>
-          </div>
-
-          {/* Resolution */}
-          <div className="field-col">
-            <div className="field-label">
-              <span>Resolution</span>
-            </div>
-            <div className="aspect-pill-group">
-              {[
-                { scale: 1, label: "1x" },
-                { scale: 2, label: "2x (Retina)" },
-                { scale: 3, label: "3x" },
-              ].map((item) => (
-                <button
-                  key={item.scale}
-                  type="button"
-                  className={`aspect-pill ${config.exportScale === item.scale ? "active" : ""}`}
-                  onClick={() => updateConfig("exportScale", item.scale)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Export PNG */}
-          <button
-            className="btn primary"
-            style={{ width: "100%", padding: "9px 14px" }}
-            onClick={onExportPng}
-            disabled={isExporting}
-          >
-            {isExporting ? (
-              <span>Generating PNG…</span>
-            ) : (
-              <>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
-                <span>Export PNG ({config.exportScale}x)</span>
-              </>
-            )}
-          </button>
-
-          {/* Quick Actions */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-            <button
-              className="btn ghost"
-              onClick={onCopyImage}
-              disabled={isCopyingImage}
-              title="Copy rendered PNG image"
-            >
-              Copy Image
-            </button>
-            <button
-              className="btn ghost"
-              onClick={onCopyCode}
-              title="Copy raw code"
-            >
-              Copy Code
-            </button>
-          </div>
-
-          {/* Config JSON Actions */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 2 }}>
-            <button
-              className="btn subtle"
-              style={{ fontSize: 11, border: "1px solid var(--border-subtle)" }}
-              onClick={onExportConfig}
-              title="Export this style as .glyph.json"
-            >
-              Export JSON
-            </button>
-            <button
-              className="btn subtle"
-              style={{ fontSize: 11, border: "1px solid var(--border-subtle)" }}
-              onClick={onTriggerImport}
-              title="Import .glyph.json"
-            >
-              Import JSON
-            </button>
-          </div>
-
-          {exportError && <div className="export-error">{exportError}</div>}
-        </div>
-      </div>
-    </aside>
-  );
+  return <aside className={`right-sidebar ${mobileOpen ? "mobile-open" : ""}`}><div className="mobile-sheet-grab" aria-hidden="true" /><div className="sidebar-header"><div><span className="eyebrow">Customize</span><h2>Inspector</h2></div><div className="sidebar-header-actions"><button className="reset-all" onClick={reset}>Reset all</button><button type="button" className="mobile-sheet-toggle" onClick={() => setMobileOpen((value) => !value)} aria-expanded={mobileOpen} aria-controls="glyph-customize-panel">{mobileOpen ? "Close" : "Open"}<span aria-hidden="true">{mobileOpen ? "↓" : "↑"}</span></button></div></div><div className="sidebar-content" id="glyph-customize-panel">
+    <Section id="01" title="Presets" hint={`${Object.keys(allPresets).length} styles`} open={open.presets} onToggle={() => toggle("presets")}><div className="preset-grid">{Object.entries(allPresets).map(([key, item]) => <button key={key} className={`preset-card ${activePreset === key ? "active" : ""}`} onClick={() => applyPreset(key)}><span className={`preset-preview preset-${key}`}><i /><i /><i /></span><span className="preset-name">{item.label}</span><span className="preset-desc">{item.description}</span></button>)}</div><div className="save-preset"><input className="text-input" value={presetName} onChange={(e) => setPresetName(e.target.value)} placeholder="Preset name" aria-label="Preset name" /><button className="reset-link" onClick={savePreset}>Save current</button></div></Section>
+     <Section id="02" title="Canvas" hint={`${config.canvasWidth} × ${config.autoHeight ? "auto" : config.canvasHeight}`} open={open.canvas} onToggle={() => toggle("canvas")} onReset={() => resetGroup(["canvasWidth", "canvasHeight", "autoHeight", "aspectLock", "padding", "exportScale"])}><Segmented label="Aspect ratio" value={config.autoHeight ? "auto" : (ASPECT_RATIOS.find((r) => r.width === config.canvasWidth && r.height === config.canvasHeight)?.id || "custom")} options={ASPECT_RATIOS.map((r) => [r.id, r.label])} onChange={(id) => selectRatio(ASPECT_RATIOS.find((r) => r.id === id))} /><Toggle label="Lock aspect ratio" checked={config.aspectLock} onChange={(v) => update("aspectLock", v)} /><Slider label="Width" value={config.canvasWidth} min={320} max={2400} step={10} suffix=" px" onChange={(v) => updateDimension("canvasWidth", v)} /><Toggle label="Auto height" checked={config.autoHeight} onChange={(v) => update("autoHeight", v)} />{!config.autoHeight && <Slider label="Height" value={config.canvasHeight} min={200} max={2000} step={10} suffix=" px" onChange={(v) => updateDimension("canvasHeight", v)} />}<Slider label="Outer padding" value={config.padding} min={0} max={160} step={4} suffix=" px" onChange={(v) => update("padding", v)} /><Segmented label="Export scale" value={config.exportScale} options={[[1, "1×"], [2, "2×"], [3, "3×"]]} onChange={(v) => update("exportScale", v)} /></Section>
+    <Section id="03" title="Background" hint={config.backgroundMode || "legacy"} open={open.background} onToggle={() => toggle("background")} onReset={() => resetGroup(["background", "backgroundMode", "backgroundAngle", "backgroundStart", "backgroundEnd"])}><Segmented label="Mode" value={config.backgroundMode} options={[["legacy", "Swatches"], ["solid", "Solid"], ["gradient", "Gradient"], ["transparent", "Clear"]]} onChange={(v) => update("backgroundMode", v)} />{config.backgroundMode === "legacy" && <div className="swatches-grid">{BACKGROUND_SWATCHES.map((s) => <button type="button" key={s.id} className={`swatch-btn ${config.background === s.value ? "active" : ""}`} style={{ background: s.value }} title={s.label} aria-label={s.label} onClick={() => update("background", s.value)}>{config.background === s.value && "✓"}</button>)}</div>}{config.backgroundMode === "solid" && <ColorInput label="Color" value={config.backgroundStart} onChange={(v) => update("backgroundStart", v)} />}{config.backgroundMode === "gradient" && <><Slider label="Angle" value={config.backgroundAngle} min={0} max={360} suffix="°" onChange={(v) => update("backgroundAngle", v)} /><ColorInput label="Start" value={config.backgroundStart} onChange={(v) => update("backgroundStart", v)} /><ColorInput label="End" value={config.backgroundEnd} onChange={(v) => update("backgroundEnd", v)} /></>}<div className="field-label">Preview: <code>{getBackground(config)}</code></div></Section>
+    <Section id="04" title="Window" hint={config.title} open={open.window} onToggle={() => toggle("window")} onReset={() => resetGroup(["title", "frameStyle", "showTrafficLights", "cornerRadius", "shadow", "shadowBlur", "shadowOffset", "shadowOpacity", "showBorder"])}><label className="field-col"><span className="field-label">Filename</span><input className="text-input" type="text" value={config.title} onChange={(e) => update("title", e.target.value)} /></label><Segmented label="Frame style" value={config.frameStyle} options={frameOptions} onChange={(v) => update("frameStyle", v)} /><Toggle label="Traffic lights" checked={config.showTrafficLights} onChange={(v) => update("showTrafficLights", v)} /><Slider label="Corner radius" value={config.cornerRadius} min={0} max={48} step={2} suffix=" px" onChange={(v) => update("cornerRadius", v)} /><Slider label="Shadow blur" value={config.shadowBlur} min={0} max={120} suffix=" px" onChange={(v) => update("shadowBlur", v)} /><Slider label="Shadow offset" value={config.shadowOffset} min={0} max={80} suffix=" px" onChange={(v) => update("shadowOffset", v)} /><Slider label="Shadow opacity" value={config.shadowOpacity} min={0} max={100} suffix="%" onChange={(v) => update("shadowOpacity", v)} /><Toggle label="Border" checked={config.showBorder} onChange={(v) => update("showBorder", v)} /></Section>
+     <Section id="05" title="Code" hint={`${config.fontSize}px · ${SYNTAX_THEMES[config.syntaxTheme]}`} open={open.code} onToggle={() => toggle("code")} onReset={() => resetGroup(["syntaxTheme", "fontFamily", "fontSize", "lineHeight", "ligatures", "showLineNumbers", "highlightedLines", "wrap", "tabSize"])}><div className="field-col"><span className="field-label">Syntax theme</span><div className="theme-grid">{Object.entries(SYNTAX_THEMES).map(([key, label]) => <button type="button" key={key} className={`theme-card ${config.syntaxTheme === key ? "active" : ""}`} onClick={() => update("syntaxTheme", key)}><span className="theme-dots">{(THEME_PREVIEW_COLORS[key] || []).map((color) => <i key={color} style={{ background: color }} />)}</span><span>{label}</span></button>)}</div></div><Segmented label="Font family" value={config.fontFamily} options={FONT_FAMILIES.map((x) => [x, x === "geist" ? "Geist" : "Mono"])} onChange={(v) => update("fontFamily", v)} /><Slider label="Font size" value={config.fontSize} min={10} max={32} suffix=" px" onChange={(v) => update("fontSize", v)} /><Slider label="Line height" value={config.lineHeight} min={1} max={3} step={0.1} onChange={(v) => update("lineHeight", v)} /><Toggle label="Ligatures" checked={config.ligatures} onChange={(v) => update("ligatures", v)} /><Toggle label="Line numbers" checked={Boolean(config.showLineNumbers)} onChange={(v) => update("showLineNumbers", v)} /><label className="field-col"><span className="field-label">Highlighted lines</span><input className="text-input" value={config.highlightedLines} onChange={(e) => update("highlightedLines", e.target.value)} placeholder="1, 3-5" /></label><Toggle label="Wrap lines" checked={config.wrap} onChange={(v) => update("wrap", v)} /><Slider label="Tab size" value={config.tabSize} min={2} max={8} step={1} suffix=" spaces" onChange={(v) => update("tabSize", v)} /></Section>
+     <Section id="06" title="Layout" hint={`${config.innerPadding}px padding`} open={open.layout} onToggle={() => toggle("layout")} onReset={() => resetGroup(["innerPadding", "showWatermark"])}><Slider label="Inner padding" value={config.innerPadding} min={0} max={120} step={4} suffix=" px" onChange={(v) => update("innerPadding", v)} /><Toggle label="Watermark" checked={Boolean(config.showWatermark)} onChange={(v) => update("showWatermark", v)} /></Section>
+    <Section id="07" title="Language" hint={currentLang} open={open.language} onToggle={() => toggle("language")} onReset={() => resetGroup(["language"])}><label className="field-col"><span className="field-label">Highlighting mode</span><select className="select-input" value={config.language} onChange={(e) => update("language", e.target.value)}><option value="auto">Auto-detect · {detectedLabel}</option><optgroup label="Supported languages">{LANGUAGE_OPTIONS.map((lang) => <option key={lang} value={lang}>{LANGUAGE_LABELS[lang] || lang}</option>)}</optgroup></select></label></Section>
+    <div className="sidebar-footer"><p>⌘ E export · ⌘ ⇧ C copy image</p></div>
+  </div></aside>;
 }

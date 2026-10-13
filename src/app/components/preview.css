@@ -1,0 +1,56 @@
+.glyph-preview-stage { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg-app, #09090b); }
+.glyph-preview-toolbar, .glyph-preview-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 14px 24px; flex-shrink: 0; font-size: 11px; color: var(--text-secondary, #a1a1aa); }
+.glyph-preview-language { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.glyph-preview-stage select, .glyph-preview-stage button:not(.glyph-canvas-resize) { border: 1px solid var(--border-strong, #38383d); border-radius: 7px; background: var(--bg-surface, #111114); color: var(--text-primary, #f4f4f5); padding: 6px 9px; font: inherit; cursor: pointer; }
+.glyph-preview-size { font-family: var(--font-geist-mono), monospace; font-size: 10px; }
+.glyph-preview-workspace { overflow: auto; flex: 1 1 auto; min-height: 160px; min-width: 0; background-color: var(--bg-app, #09090b); background-image: radial-gradient(var(--workspace-dot, rgba(255,255,255,.065)) .8px, transparent .8px); background-size: 16px 16px; }
+.glyph-preview-scroll-area { display: flex; width: max-content; min-width: 100%; min-height: 100%; padding: 36px; box-sizing: border-box; }
+.glyph-canvas-shell { position: relative; flex: none; margin: auto; outline: 1px solid var(--border-strong, #38383d); background-image: linear-gradient(45deg, var(--checker-a, #242429) 25%, transparent 25%), linear-gradient(-45deg, var(--checker-a, #242429) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--checker-a, #242429) 75%), linear-gradient(-45deg, transparent 75%, var(--checker-a, #242429) 75%); background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0; background-color: var(--checker-b, #1b1b20); }
+.glyph-capture { position: relative; box-sizing: border-box; display: flex; align-items: center; overflow: hidden; color: #d4d4d8; }
+.glyph-capture .glyph-preview-window { width: fit-content; min-width: min(360px, 100%); max-width: 100%; max-height: 100%; flex: 0 1 auto; overflow: hidden; transition: none; will-change: auto; background: var(--code-bg, #0c0d11); }
+.glyph-window-titlebar { display: flex; align-items: center; gap: 14px; padding: 12px 16px; min-height: 40px; flex-shrink: 0; border-bottom: 1px solid var(--titlebar-border, #25252a); background: var(--titlebar-bg, #121319); color: var(--titlebar-fg, #d4d4d8); cursor: grab; touch-action: none; }
+.glyph-window-titlebar:active { cursor: grabbing; }
+.glyph-frame-minimal { padding: 9px 16px; min-height: 34px; }
+.glyph-window-traffic { display: flex; gap: 7px; flex-shrink: 0; }
+.glyph-window-traffic i { display: block; width: 10px; height: 10px; border-radius: 50%; background: #ff5f56; }
+.glyph-window-traffic i:nth-child(2) { background: #ffbd2e; }
+.glyph-window-traffic i:nth-child(3) { background: #27c93f; }
+.glyph-window-title { position: relative; flex: 1; min-width: 0; font: 11px/18px var(--font-mono), monospace; text-align: center; }
+.glyph-window-title > span { display: block; min-height: 18px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 5px; }
+.glyph-window-title input { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; padding: 0 5px; font: inherit; text-align: inherit; background: transparent; color: transparent; caret-color: var(--code-fg, #d4d4d8); border-radius: 3px; }
+.glyph-window-controls { font: 14px monospace; white-space: pre; }
+.glyph-preview-watermark { position: absolute; bottom: 12px; right: 14px; border-radius: 4px; padding: 3px 8px; background: rgba(0,0,0,.45); color: #e4e4e7; font: 10px/16px var(--font-sans), sans-serif; }
+.glyph-canvas-resize { position: absolute; display: block; background: var(--bg-surface-elevated, #242429); border: 1px solid var(--border-strong, #52525b); color: var(--text-primary, #f4f4f5); border-radius: 4px; touch-action: none; padding: 0; }
+.glyph-resize-width { right: -14px; top: calc(50% - 20px); height: 40px; width: 8px; cursor: ew-resize; }
+.glyph-resize-corner { right: -17px; bottom: -17px; width: 24px; height: 24px; font-size: 17px; cursor: nwse-resize; }
+.glyph-preview-empty { margin: 0 24px 12px; padding: 16px; border: 1px dashed var(--border-strong, #38383d); border-radius: 10px; display: flex; gap: 16px; justify-content: space-between; align-items: center; font-size: 12px; }
+.glyph-preview-empty strong { color: var(--text-primary, #f4f4f5); font-weight: 500; }
+.glyph-preview-empty p { margin: 5px 0 0; color: var(--text-secondary, #a1a1aa); line-height: 1.6; }
+.glyph-preview-error { margin: 0 24px 12px; color: #f87171; font-size: 12px; }
+.glyph-preview-stage :focus-visible { outline: 2px solid var(--text-secondary, #a1a1aa); outline-offset: 3px; }
+.glyph-preview-stage .glyph-code-input:focus-visible { outline: none; }
+.glyph-preview-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.glyph-code-editor { display: flex; gap: 14px; min-width: 0; min-height: 0; flex: 1 1 auto; overflow: hidden; color: var(--code-fg, #d4d4d8); background: var(--code-bg, #0c0d11); }
+.glyph-code-gutter { flex: none; overflow: hidden; text-align: right; min-width: 2ch; color: var(--tok-comment, #71717a); user-select: none; font: inherit; line-height: inherit; }
+.glyph-code-stack { position: relative; min-width: 0; min-height: 1.6em; flex: 1 1 auto; }
+.glyph-code-highlight, .glyph-code-input { padding: 0; margin: 0; border: 0; font: inherit; font-variant-ligatures: inherit; letter-spacing: 0; tab-size: var(--editor-tab-size, 4); white-space: var(--editor-white-space); overflow-wrap: var(--editor-wrap); word-break: normal; text-align: left; }
+.glyph-code-highlight { height: 100%; max-height: 100%; overflow: hidden; color: inherit; }
+.glyph-code-line { display: block; min-height: 1lh; font: inherit; font-variant-ligatures: inherit; white-space: inherit; overflow-wrap: inherit; width: 100%; background: transparent; }
+.glyph-code-line.is-highlighted { background: rgba(128,128,160,.16); box-shadow: inset 2px 0 #818cf8; }
+/* Matching token metrics prevents the transparent editing layer drifting. */
+.glyph-code-line .hljs-comment, .glyph-code-line .hljs-quote, .glyph-code-line .hljs-emphasis { font-style: normal; }
+.glyph-code-line .hljs-strong { font-weight: inherit; }
+.glyph-code-input { position: absolute; inset: 0; width: 100%; height: 100%; resize: none; overflow: auto; scrollbar-width: none; background: transparent; color: transparent; caret-color: var(--code-fg, #d4d4d8); outline: none; }
+.glyph-code-input::-webkit-scrollbar { display: none; }
+.glyph-code-input::selection { background: rgba(128,128,160,.28); }
+@media (max-width: 900px) {
+  .glyph-preview-stage { flex: 0 0 auto; height: 540px; min-height: 420px; }
+  .glyph-preview-toolbar, .glyph-preview-footer { padding: 12px 16px; }
+  .glyph-preview-empty { margin-left: 16px; margin-right: 16px; }
+  .glyph-preview-scroll-area { padding: 24px; }
+}
+@media (max-width: 480px) {
+  .glyph-preview-empty { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .glyph-detected-language { font-size: 10px; }
+  .glyph-preview-footer { font-size: 10px; }
+}

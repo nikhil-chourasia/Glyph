@@ -27,7 +27,11 @@ export const ASPECT_RATIOS = [
   { id: "4-3", label: "4:3", width: 1000, height: 750 },
   { id: "1-1", label: "1:1", width: 800, height: 800 },
   { id: "twitter", label: "X / Post", width: 1200, height: 630 },
+  { id: "linkedin", label: "LinkedIn", width: 1200, height: 627 },
 ];
+
+export const FRAME_STYLES = ["macos", "windows", "minimal", "none"];
+export const FONT_FAMILIES = ["geist", "monospace"];
 
 export const DEFAULT_CONFIG = {
   title: "untitled.py",
@@ -45,6 +49,24 @@ export const DEFAULT_CONFIG = {
   cornerRadius: 14,
   shadow: 45,
   exportScale: 2,
+  aspectLock: false,
+  backgroundMode: "legacy",
+  backgroundAngle: 145,
+  backgroundStart: "#181920",
+  backgroundEnd: "#0f1015",
+  frameStyle: "macos",
+  shadowBlur: 40,
+  shadowOffset: 14,
+  shadowOpacity: 45,
+  showBorder: false,
+  fontFamily: "geist",
+  lineHeight: 1.5,
+  ligatures: true,
+  highlightedLines: "",
+  wrap: false,
+  tabSize: 4,
+  alignment: "center",
+  innerPadding: 24,
 };
 
 export const PRESETS = {
@@ -66,6 +88,12 @@ export const PRESETS = {
       autoHeight: true,
     },
   },
+  dark: {
+    id: "dark",
+    label: "Dark",
+    description: "Deep charcoal canvas with a restrained editor frame",
+    config: { ...DEFAULT_CONFIG, background: BACKGROUND_SWATCHES[0].value, backgroundMode: "legacy", shadow: 50, shadowOpacity: 50 },
+  },
   obsidian: {
     id: "obsidian",
     label: "Pure Noir",
@@ -75,6 +103,7 @@ export const PRESETS = {
       syntaxTheme: "glyph-dark",
       background: "#0c0d11",
       shadow: 35,
+      shadowOpacity: 35,
       cornerRadius: 12,
       padding: 40,
       fontSize: 14,
@@ -97,10 +126,17 @@ export const PRESETS = {
       fontSize: 13,
       cornerRadius: 10,
       shadow: 35,
+      shadowOpacity: 35,
       showTrafficLights: true,
       showWatermark: true,
       autoHeight: true,
     },
+  },
+  presentation: {
+    id: "presentation",
+    label: "Presentation",
+    description: "Large, spacious 16:9 layout for sharing code",
+    config: { ...DEFAULT_CONFIG, canvasWidth: 1200, canvasHeight: 675, autoHeight: false, padding: 64, fontSize: 16, background: BACKGROUND_SWATCHES[3].value, backgroundMode: "legacy", showLineNumbers: false },
   },
   light: {
     id: "light",
@@ -114,6 +150,7 @@ export const PRESETS = {
       fontSize: 15,
       cornerRadius: 16,
       shadow: 30,
+      shadowOpacity: 30,
       showLineNumbers: false,
       showTrafficLights: true,
       showWatermark: true,
@@ -132,6 +169,7 @@ export const PRESETS = {
       fontSize: 14,
       cornerRadius: 14,
       shadow: 40,
+      shadowOpacity: 40,
       showLineNumbers: false,
       showTrafficLights: true,
       showWatermark: true,
@@ -150,6 +188,7 @@ export const PRESETS = {
       fontSize: 14,
       cornerRadius: 14,
       shadow: 45,
+      shadowOpacity: 45,
       showLineNumbers: true,
       showTrafficLights: true,
       showWatermark: true,
@@ -157,6 +196,24 @@ export const PRESETS = {
     },
   },
 };
+
+// A CSS value consumed by the preview (and deliberately limited to generated values).
+export function getBackground(config = {}) {
+  const mode = config.backgroundMode || "legacy";
+  if (mode === "transparent") return "transparent";
+  if (mode === "solid") return config.backgroundStart || config.background || DEFAULT_CONFIG.background;
+  if (mode === "gradient") {
+    const angle = Number.isFinite(Number(config.backgroundAngle)) ? Number(config.backgroundAngle) : 145;
+    return `linear-gradient(${angle}deg, ${config.backgroundStart || "#181920"}, ${config.backgroundEnd || "#0f1015"})`;
+  }
+  return config.background || DEFAULT_CONFIG.background;
+}
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const number = (value, fallback, min, max) => typeof value === "number" && Number.isFinite(value) ? clamp(value, min, max) : fallback;
+const safeText = (value, fallback, max = 200) => typeof value === "string" ? value.replace(/[<>]/g, "").slice(0, max) : fallback;
+const safeColor = (value, fallback) => typeof value === "string" && (/^#[0-9a-f]{3,8}$/i.test(value) || /^rgba?\(\s*[\d .,]+\)$/i.test(value)) ? value : fallback;
+const SUPPORTED_LANGUAGES = new Set(["auto", "javascript", "typescript", "xml", "css", "scss", "json", "python", "go", "rust", "java", "c", "cpp", "csharp", "ruby", "php", "swift", "kotlin", "bash", "yaml", "sql", "markdown", "dockerfile", "graphql", "ini", "plaintext"]);
 
 /** Validates and merges an imported configuration object */
 export function sanitizeImportedConfig(data) {
@@ -166,15 +223,15 @@ export function sanitizeImportedConfig(data) {
 
   const merged = { ...DEFAULT_CONFIG };
 
-  if (typeof data.title === "string") merged.title = data.title;
-  if (typeof data.language === "string") merged.language = data.language;
+  if (typeof data.title === "string") merged.title = safeText(data.title, merged.title, 120);
+  if (typeof data.language === "string" && SUPPORTED_LANGUAGES.has(data.language)) merged.language = data.language;
   if (typeof data.showLineNumbers === "boolean") merged.showLineNumbers = data.showLineNumbers;
   if (typeof data.showTrafficLights === "boolean") merged.showTrafficLights = data.showTrafficLights;
   if (typeof data.showWatermark === "boolean") merged.showWatermark = data.showWatermark;
   if (typeof data.syntaxTheme === "string" && SYNTAX_THEMES[data.syntaxTheme]) {
     merged.syntaxTheme = data.syntaxTheme;
   }
-  if (typeof data.background === "string") merged.background = data.background;
+  if (typeof data.background === "string" && (data.background.length < 300) && (/^#[0-9a-f]{3,8}$/i.test(data.background) || /^linear-gradient\([^;{}]*\)$/i.test(data.background))) merged.background = data.background;
   if (typeof data.canvasWidth === "number" && !isNaN(data.canvasWidth)) {
     merged.canvasWidth = Math.max(320, Math.min(2400, data.canvasWidth));
   }
@@ -197,6 +254,25 @@ export function sanitizeImportedConfig(data) {
   if (typeof data.exportScale === "number" && [1, 2, 3].includes(data.exportScale)) {
     merged.exportScale = data.exportScale;
   }
+
+  if (typeof data.aspectLock === "boolean") merged.aspectLock = data.aspectLock;
+  if (["legacy", "solid", "gradient", "transparent"].includes(data.backgroundMode)) merged.backgroundMode = data.backgroundMode;
+  merged.backgroundAngle = number(data.backgroundAngle, merged.backgroundAngle, 0, 360);
+  merged.backgroundStart = safeColor(data.backgroundStart, merged.backgroundStart);
+  merged.backgroundEnd = safeColor(data.backgroundEnd, merged.backgroundEnd);
+  if (FRAME_STYLES.includes(data.frameStyle)) merged.frameStyle = data.frameStyle;
+  merged.shadowBlur = number(data.shadowBlur, merged.shadowBlur, 0, 120);
+  merged.shadowOffset = number(data.shadowOffset, merged.shadowOffset, 0, 80);
+  merged.shadowOpacity = number(data.shadowOpacity, typeof data.shadow === "number" ? clamp(data.shadow, 0, 100) : merged.shadowOpacity, 0, 100);
+  if (typeof data.showBorder === "boolean") merged.showBorder = data.showBorder;
+  if (FONT_FAMILIES.includes(data.fontFamily)) merged.fontFamily = data.fontFamily;
+  merged.lineHeight = number(data.lineHeight, merged.lineHeight, 1, 3);
+  if (typeof data.ligatures === "boolean") merged.ligatures = data.ligatures;
+  if (typeof data.highlightedLines === "string") merged.highlightedLines = data.highlightedLines.replace(/[^0-9,\-\s]/g, "").slice(0, 200);
+  if (typeof data.wrap === "boolean") merged.wrap = data.wrap;
+  merged.tabSize = number(data.tabSize, merged.tabSize, 2, 8);
+  if (["left", "center", "right"].includes(data.alignment)) merged.alignment = data.alignment;
+  merged.innerPadding = number(data.innerPadding, merged.innerPadding, 0, 120);
 
   return merged;
 }
